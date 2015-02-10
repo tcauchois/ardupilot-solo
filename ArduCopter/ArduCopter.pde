@@ -1108,6 +1108,9 @@ static void fifty_hz_logging_loop()
         DataFlash.Log_Write_IMU(ins);
     }
 #endif
+    if (should_log(MASK_LOG_ANY)) {
+        Log_Write_Data(DATA_AP_STATE, ap.value);
+    }
 }
 
 // three_hz_loop - 3.3hz loop
@@ -1134,10 +1137,6 @@ static void three_hz_loop()
 // one_hz_loop - runs at 1Hz
 static void one_hz_loop()
 {
-    if (should_log(MASK_LOG_ANY)) {
-        Log_Write_Data(DATA_AP_STATE, ap.value);
-    }
-
     // perform pre-arm checks & display failures every 30 seconds
     static uint8_t pre_arm_display_counter = 15;
     pre_arm_display_counter++;
