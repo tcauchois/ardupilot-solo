@@ -383,6 +383,7 @@ static union {
         uint8_t system_time_set     : 1; // 20  // true if the system time has been set from the GPS
         uint8_t gps_base_pos_set    : 1; // 21  // true when the gps base position has been set (used for RTK gps only)
         enum HomeState home_state   : 2; // 22,23 - home status (unset, set, locked)
+        uint8_t in_ground_effect    : 1; // 24
     };
     uint32_t value;
 } ap;
@@ -1018,6 +1019,8 @@ static void throttle_loop()
 
     // update throttle_low_comp value (controls priority of throttle vs attitude control)
     update_throttle_low_comp();
+
+    update_ground_effect_detector();
 
     // check auto_armed status
     update_auto_armed();
