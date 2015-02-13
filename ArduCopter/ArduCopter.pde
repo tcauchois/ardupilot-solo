@@ -1019,15 +1019,6 @@ static void fifty_hz_logging_loop()
         Log_Write_Attitude();
         Log_Write_Rate();
     }
-
-    if (should_log(MASK_LOG_RCOUT)) {
-        DataFlash.Log_Write_RCOUT();
-    }
-
-    // log IMU data if we're not already logging at the higher rate
-    if (should_log(MASK_LOG_IMU) && !should_log(MASK_LOG_IMU_FAST)) {
-        DataFlash.Log_Write_IMU(ins);
-    }
 #endif
 }
 
