@@ -25,6 +25,7 @@
 #include <AP_Math.h>
 #include "AP_InertialSensor_UserInteract.h"
 
+class DataFlash_Class;
 class AP_InertialSensor_Backend;
 
 /* AP_InertialSensor is an abstraction for gyro and accel measurements
@@ -69,6 +70,15 @@ public:
     ///
     void init( Start_style style,
                Sample_rate sample_rate);
+
+    /// Perform cold startup initialisation for just the accelerometers.
+    ///
+    /// @note This should not be called unless ::init has previously
+    ///       been called, as ::init may perform other work.
+    ///
+    void init_accel();
+
+    void set_dataflash(DataFlash_Class *df) { _DataFlash = df; }
 
     /// Register a new gyro/accel driver, allocating an instance
     /// number
@@ -321,6 +331,7 @@ private:
     uint32_t _accel_startup_error_count[INS_MAX_INSTANCES];
     uint32_t _gyro_startup_error_count[INS_MAX_INSTANCES];
     bool _startup_error_counts_set;
+    DataFlash_Class *_DataFlash;
 };
 
 #include "AP_InertialSensor_Backend.h"
