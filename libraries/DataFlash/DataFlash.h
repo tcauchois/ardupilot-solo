@@ -84,6 +84,7 @@ public:
     void Log_Write_Compass(const Compass &compass);
     void Log_Write_Mode(uint8_t mode);
     void Log_Write_Gimbal(const AP_Gimbal &gimbal);
+    void Log_Write_Ins(uint8_t msgid, uint32_t time_us, const Vector3f &measurement);
 
     bool logging_started(void) const { return log_write_started; }
 
@@ -526,6 +527,14 @@ struct PACKED log_AIRSPEED {
     float   offset;
 };
 
+struct PACKED log_Ins {
+    LOG_PACKET_HEADER;
+    uint32_t time_us;
+    float x;
+    float y;
+    float z;
+};
+
 /*
 Format characters in the format string for binary log messages
   b   : int8_t
@@ -638,7 +647,19 @@ Format characters in the format string for binary log messages
     { LOG_GIMBAL1_MSG, sizeof(log_Gimbal1), \
       "GMB1", "Iffffffffff", "TimeMS,dt,dax,day,daz,dvx,dvy,dvz,jx,jy,jz" }, \
     { LOG_GIMBAL2_MSG, sizeof(log_Gimbal2), \
-      "GMB2", "IBfffffffff", "TimeMS,es,ex,ey,ez,rx,ry,rz,tx,ty,tz" }
+      "GMB2", "IBfffffffff", "TimeMS,es,ex,ey,ez,rx,ry,rz,tx,ty,tz" }, \
+    { LOG_ACC1_MSG, sizeof(log_Ins), \
+      "ACC1",  "Ifff", "TimeUS,X,Y,Z" }, \
+    { LOG_ACC2_MSG, sizeof(log_Ins), \
+      "ACC2",  "Ifff", "TimeUS,X,Y,Z" }, \
+    { LOG_ACC3_MSG, sizeof(log_Ins), \
+      "ACC3",  "Ifff", "TimeUS,X,Y,Z" }, \
+    { LOG_GYR1_MSG, sizeof(log_Ins), \
+      "GYR1",  "Ifff", "TimeUS,X,Y,Z" }, \
+    { LOG_GYR2_MSG, sizeof(log_Ins), \
+      "GYR2",  "Ifff", "TimeUS,X,Y,Z" }, \
+    { LOG_GYR3_MSG, sizeof(log_Ins), \
+      "GYR3",  "Ifff", "TimeUS,X,Y,Z" }
 
 #if HAL_CPU_CLASS >= HAL_CPU_CLASS_75
 #define LOG_COMMON_STRUCTURES LOG_BASE_STRUCTURES, LOG_EXTRA_STRUCTURES
@@ -694,6 +715,12 @@ Format characters in the format string for binary log messages
 #define LOG_MODE_MSG      170
 #define LOG_GIMBAL1_MSG   171
 #define LOG_GIMBAL2_MSG   172
+#define LOG_ACC1_MSG      173
+#define LOG_ACC2_MSG      174
+#define LOG_ACC3_MSG      175
+#define LOG_GYR1_MSG      176
+#define LOG_GYR2_MSG      177
+#define LOG_GYR3_MSG      178
 
 // message types 200 to 210 reversed for GPS driver use
 // message types 211 to 220 reversed for autotune use
