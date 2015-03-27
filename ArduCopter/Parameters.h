@@ -323,6 +323,7 @@ public:
         k_param_autotune_axis_bitmask,  // 245
         k_param_autotune_aggressiveness,  // 246
         k_param_pi_vel_xy,  // 247
+        k_param_hover_power, // 248
 
         // 254,255: reserved
     };
@@ -476,6 +477,9 @@ public:
     // Autotune
     AP_Int8                 autotune_axis_bitmask;
     AP_Float                autotune_aggressiveness;
+
+    // Power Required To Hover
+    AP_Int16                hover_power;
 
     // Note: keep initializers here in the same order as they are declared
     // above.

@@ -996,6 +996,13 @@ const AP_Param::Info var_info[] PROGMEM = {
     // @User: Standard
     GSCALAR(autotune_aggressiveness, "AUTOTUNE_AGGR", 0.05f),
 
+    // @Param: HOVER_POWER
+    // @DisplayName: Electrical power required to hover
+    // @Description: Electical power (watts) required to sustain height in hover. Used to check if the copter has landed. Set to 0 to disable check
+    // @Range: 0 32000
+    // @User: Standard
+    GSCALAR(hover_power, "HOVER_POWER", 0),
+
     AP_VAREND
 };
 

@@ -751,3 +751,25 @@ static void motors_output()
         motors.output();
     }
 }
+
+// Calculate ratio of power to lift which is used to determine if the copter has landed
+// The ratio is normalised to a value of 1 for normal hovering flight
+static void calc_power_lift_ratio()
+{
+    if (g.hover_power > 0) {
+        float Tau = 0.5f; // filter time constant
+        static float liftFilt;
+        static float powerFilt;
+        float alpha = constrain_float(float(hal.scheduler->micros() - power_lift_ratio_time_ms) * 0.001f * Tau, 0.0f, 1.0f);
+        power_lift_ratio_time_ms = hal.scheduler->micros();
+        liftFilt = alpha * liftFilt - (1.0f - alpha) * ins.get_accel().z / GRAVITY_MSS;
+        if (liftFilt > 0.5f && liftFilt < 1.5f) {
+            float powerRaw = (battery.voltage() * battery.current_amps()) / float(g.hover_power);
+            powerFilt = alpha * powerFilt + (1.0f - alpha) * powerRaw;
+            power_lift_ratio = powerFilt / liftFilt;
+        }
+    } else {
+        power_lift_ratio = 0.0f;
+    }
+
+}

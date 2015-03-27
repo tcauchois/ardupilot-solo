@@ -220,7 +220,9 @@ static bool in_log_download;
 static void update_events(void);
 static void print_flight_mode(AP_HAL::BetterStream *port, uint8_t mode);
 static void gcs_send_text_fmt(const prog_char_t *fmt, ...);
-
+static void calc_power_to_lift();
+static float power_lift_ratio;
+static uint32_t power_lift_ratio_time_ms;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Dataflash
