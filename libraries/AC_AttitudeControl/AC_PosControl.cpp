@@ -932,7 +932,9 @@ float AC_PosControl::calc_leash_length(float speed_cms, float accel_cms, float k
 // this reduces the sensitivity to baro noise and transient errors in ground effect
 void AC_PosControl::setGndEffectMode(bool gndEffectMode)
 {
-    if(_gnd_effect_mode != gndEffectMode) {
+    _gnd_effect_mode = false;
+    return;
+/*    if(_gnd_effect_mode != gndEffectMode) {
         if(gndEffectMode) {
             // turning feedforward on, initialize
             float curr_alt = _inav.get_altitude();
@@ -949,5 +951,5 @@ void AC_PosControl::setGndEffectMode(bool gndEffectMode)
             _pos_target.z = new_pos_error + curr_alt;
         }
     }
-    _gnd_effect_mode = gndEffectMode;
+    _gnd_effect_mode = gndEffectMode;*/
 }
