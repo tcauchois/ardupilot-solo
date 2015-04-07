@@ -618,16 +618,6 @@ static bool arm_checks(bool display_failure, bool arming_from_gcs)
         return true;
     }
 
-    // check Baro & inav alt are within 1m
-    if ((g.arming_check == ARMING_CHECK_ALL) || (g.arming_check & ARMING_CHECK_BARO)) {
-        if(fabs(inertial_nav.get_altitude() - baro_alt) > PREARM_MAX_ALT_DISPARITY_CM) {
-            if (display_failure) {
-                gcs_send_text_P(SEVERITY_HIGH,PSTR("Arm: Altitude disparity"));
-            }
-            return false;
-        }
-    }
-
     // check gps
     if (!pre_arm_gps_checks(display_failure)) {
         return false;
