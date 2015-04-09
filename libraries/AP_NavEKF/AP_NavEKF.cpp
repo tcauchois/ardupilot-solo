@@ -4894,17 +4894,15 @@ bool NavEKF::calcGpsGoodToAlign(void)
 // check in flight by declaring failed if timed out
 void NavEKF::checkRngHealth(float rawRange)
 {
-    // check that we are reliant on range sensor data
-    bool testRequired = (_fusionModeGPS == 3) && (_altSource == 1);
-    // run the test when the filter has settled
-    if (!vehicleArmed && ((imuSampleTime_ms - ekfStartTime_ms) > 10000)) {
+    // run the test before arming
+    if (!vehicleArmed) {
         minHgtPreFlight = min(rawRange * Tnb_flow.c.z, minHgtPreFlight);
         maxHgtPreFlight = max(rawRange * Tnb_flow.c.z, maxHgtPreFlight);
         // Check that the range sensor has been exercised through a realistic range of movement
         bool rangeExtentPassed = ((maxHgtPreFlight - minHgtPreFlight) > 0.5f) && (maxHgtPreFlight < 2.0f) && (minHgtPreFlight < 2.0f * RNG_MEAS_ON_GND);
         // latch to a passed condition (it can be failed later in flight)
-        rngSensorHealthy = rngSensorHealthy || (testRequired && rangeExtentPassed);
-    } else if (vehicleArmed && ((imuSampleTime_ms - rngValidMeaTime_ms) > 5000) && testRequired) {
+        rngSensorHealthy = rngSensorHealthy || rangeExtentPassed;
+    } else if (vehicleArmed && ((imuSampleTime_ms - rngValidMeaTime_ms) > 5000)) {
         rngSensorHealthy = false;
     }
 }
