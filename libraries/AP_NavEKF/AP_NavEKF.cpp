@@ -112,9 +112,6 @@ extern const AP_HAL::HAL& hal;
 #define INIT_GYRO_BIAS_UNCERTAINTY  0.1f
 #define INIT_ACCEL_BIAS_UNCERTAINTY 0.3f
 
-// altitude of OF and range finder when on ground
-#define RNG_MEAS_ON_GND 0.1f
-
 // Define tuning parameters
 const AP_Param::GroupInfo NavEKF::var_info[] PROGMEM = {
 
@@ -376,6 +373,13 @@ const AP_Param::GroupInfo NavEKF::var_info[] PROGMEM = {
     // @User: Advanced
     AP_GROUPINFO("ALT_SOURCE",    32, NavEKF, _altSource, 1),
 
+    // @Param: RNG_ONGND
+    // @DisplayName: Range reading on ground
+    // @Description: This parameter sets the expected range measurement(in cm) that the range finder should return when the vehicle is on the ground.
+    // @Range: 0 - 128
+    // @User: Advanced
+    AP_GROUPINFO("RNG_ONGND",    33, NavEKF, _rngOnGnd_cm, 10),
+
     AP_GROUPEND
 };
 
@@ -457,7 +461,7 @@ bool NavEKF::healthy(void) const
         return false;
     }
     // check range sensor has passed its checks if we are relying on it for flight
-    if (!rngSensorHealthy && (_fusionModeGPS == 3) && (_altSource == 1)) {
+    if (!optFlowRngHealthy && (_fusionModeGPS == 3) && (_altSource == 1)) {
         return false;
     }
 
@@ -523,7 +527,7 @@ void NavEKF::ResetHeight(void)
     for (uint8_t i=0; i<=49; i++){
         storedStates[i].position.z = -hgtMea;
     }
-    terrainState = state.position.z + RNG_MEAS_ON_GND;
+    terrainState = state.position.z + (_rngOnGnd_cm * 0.01f);
 }
 
 // this function is used to initialise the filter whilst moving, using the AHRS DCM solution
@@ -962,7 +966,7 @@ void NavEKF::SelectFlowFusion()
     } else if (flowDataValid && flowFusionTimeout && PV_AidingMode == AID_RELATIVE) {
         // we need to reset the velocities to a value estimated from the flow data
         // estimate the range
-        float initPredRng = max((terrainState - state.position[2]),RNG_MEAS_ON_GND) / Tnb_flow.c.z;
+        float initPredRng = max((terrainState - state.position[2]),(_rngOnGnd_cm * 0.01f)) / Tnb_flow.c.z;
         // multiply the range by the LOS rates to get an estimated XY velocity in body frame
         Vector3f initVel;
         initVel.x = -flowRadXYcomp[1]*initPredRng;
@@ -2662,7 +2666,7 @@ void NavEKF::EstimateTerrainOffset()
         // fuse range finder data
         if (fuseRngData) {
             // predict range
-            float predRngMeas = max((terrainState - statesAtRngTime.position[2]),RNG_MEAS_ON_GND) / Tnb_flow.c.z;
+            float predRngMeas = max((terrainState - statesAtRngTime.position[2]),(_rngOnGnd_cm * 0.01f)) / Tnb_flow.c.z;
 
             // Copy required states to local variable names
             float q0 = statesAtRngTime.quat[0]; // quaternion at optical flow measurement time
@@ -2681,7 +2685,7 @@ void NavEKF::EstimateTerrainOffset()
             varInnovRng = (R_RNG + Popt/sq(SK_RNG));
 
             // constrain terrain height to be below the vehicle
-            terrainState = max(terrainState, statesAtRngTime.position[2] + RNG_MEAS_ON_GND);
+            terrainState = max(terrainState, statesAtRngTime.position[2] + (_rngOnGnd_cm * 0.01f));
 
             // Calculate the measurement innovation
             innovRng = predRngMeas - rngMea;
@@ -2696,7 +2700,7 @@ void NavEKF::EstimateTerrainOffset()
                 terrainState -= K_RNG * innovRng;
 
                 // constrain the state
-                terrainState = max(terrainState, statesAtRngTime.position[2] + RNG_MEAS_ON_GND);
+                terrainState = max(terrainState, statesAtRngTime.position[2] + (_rngOnGnd_cm * 0.01f));
 
                 // correct the covariance
                 Popt = Popt - sq(Popt)/(SK_RNG*(R_RNG + Popt/sq(SK_RNG))*(sq(q0) - sq(q1) - sq(q2) + sq(q3)));
@@ -2725,10 +2729,10 @@ void NavEKF::EstimateTerrainOffset()
             vel.z          = statesAtFlowTime.velocity[2];
 
             // predict range to centre of image
-            float flowRngPred = max((terrainState - statesAtFlowTime.position[2]),RNG_MEAS_ON_GND) / Tnb_flow.c.z;
+            float flowRngPred = max((terrainState - statesAtFlowTime.position[2]),(_rngOnGnd_cm * 0.01f)) / Tnb_flow.c.z;
 
             // constrain terrain height to be below the vehicle
-            terrainState = max(terrainState, statesAtFlowTime.position[2] + RNG_MEAS_ON_GND);
+            terrainState = max(terrainState, statesAtFlowTime.position[2] + (_rngOnGnd_cm * 0.01f));
 
             // calculate relative velocity in sensor frame
             relVelSensor = Tnb_flow*vel;
@@ -2790,7 +2794,7 @@ void NavEKF::EstimateTerrainOffset()
             terrainState -= K_OPT * auxFlowObsInnov;
 
             // constrain the state
-            terrainState = max(terrainState, statesAtFlowTime.position[2] + RNG_MEAS_ON_GND);
+            terrainState = max(terrainState, statesAtFlowTime.position[2] + (_rngOnGnd_cm * 0.01f));
 
             // correct the covariance
             Popt = Popt - K_OPT * H_OPT * Popt;
@@ -2840,11 +2844,11 @@ void NavEKF::FuseOptFlow()
     velNED_local.z = vd;
 
     // constrain height above ground to be above range measured on ground
-    float heightAboveGndEst = max((terrainState - pd), RNG_MEAS_ON_GND);
+    float heightAboveGndEst = max((terrainState - pd), (_rngOnGnd_cm * 0.01f));
     // Calculate observation jacobians and Kalman gains
     if (obsIndex == 0) {
         // calculate range from ground plain to centre of sensor fov assuming flat earth
-        float range = constrain_float((heightAboveGndEst/Tnb_flow.c.z),RNG_MEAS_ON_GND,1000.0f);
+        float range = constrain_float((heightAboveGndEst/Tnb_flow.c.z),(_rngOnGnd_cm * 0.01f),1000.0f);
 
         // calculate relative velocity in sensor frame
         relVelSensor = Tnb_flow*velNED_local;
@@ -3629,7 +3633,7 @@ void NavEKF::getEkfControlLimits(float &ekfGndSpdLimit, float &ekfNavVelGainScal
 {
     if (PV_AidingMode == AID_RELATIVE) {
         // allow 1.0 rad/sec margin for angular motion
-        ekfGndSpdLimit = max((_maxFlowRate - 1.0f), 0.0f) * max((terrainState - state.position[2]), RNG_MEAS_ON_GND);
+        ekfGndSpdLimit = max((_maxFlowRate - 1.0f), 0.0f) * max((terrainState - state.position[2]), (_rngOnGnd_cm * 0.01f));
         // use standard gains up to 5.0 metres height and reduce above that
         ekfNavVelGainScaler = 4.0f / max((terrainState - state.position[2]),4.0f);
     } else {
@@ -3932,6 +3936,16 @@ void NavEKF::ConstrainStates()
     for (uint8_t i=16; i<=18; i++) states[i] = constrain_float(states[i],-1.0f,1.0f);
     // body magnetic field limit
     for (uint8_t i=19; i<=21; i++) states[i] = constrain_float(states[i],-0.5f,0.5f);
+    // constrain the terrain offset state
+    terrainState = max(terrainState, statesAtFlowTime.position[2] + (_rngOnGnd_cm * 0.01f));
+    // Constrain position and velocity states to zero if we are using optical flow and are on the ground
+    if (_fusionModeGPS == 3 && !takeOffDetected && vehicleArmed) {
+        state.velocity.x = 0.0f;
+        state.velocity.y = 0.0f;
+        state.position.x = 0.0f;
+        state.position.y = 0.0f;
+    }
+
 }
 
 // update IMU delta angle and delta velocity measurements
@@ -4085,7 +4099,7 @@ void NavEKF::readHgtData()
         if (_fusionModeGPS == 3 && _altSource == 1) {
             if ((imuSampleTime_ms - rngValidMeaTime_ms) < 2000) {
                 // adjust range finder measurement to allow for effect of vehicle tilt and height of sensor
-                hgtMea = max(rngMea * Tnb_flow.c.z, RNG_MEAS_ON_GND);
+                hgtMea = max(rngMea * Tnb_flow.c.z, (_rngOnGnd_cm * 0.01f));
                 // get states that were stored at the time closest to the measurement time, taking measurement delay into account
                 statesAtHgtTime = statesAtFlowTime;
                 // calculate offset to baro data that enables baro to be used as a backup
@@ -4093,7 +4107,7 @@ void NavEKF::readHgtData()
                 baroHgtOffset = 0.2f * (_baro.get_altitude() + state.position.z) + 0.8f * baroHgtOffset;
             } else {
                 // use baro measurement and correct for baro offset - failsafe use only as baro will drift
-                hgtMea = max(_baro.get_altitude() - baroHgtOffset, RNG_MEAS_ON_GND);
+                hgtMea = max(_baro.get_altitude() - baroHgtOffset, (_rngOnGnd_cm * 0.01f));
                 // get states that were stored at the time closest to the measurement time, taking measurement delay into account
                 RecallStates(statesAtHgtTime, (imuSampleTime_ms - msecHgtDelay));
             }
@@ -4182,9 +4196,15 @@ void NavEKF::writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRates, V
     // calculate bias errors on flow sensor gyro rates, but protect against spikes in data
     flowGyroBias.x = 0.99f * flowGyroBias.x + 0.01f * constrain_float((rawGyroRates.x - omegaAcrossFlowTime.x),-0.1f,0.1f);
     flowGyroBias.y = 0.99f * flowGyroBias.y + 0.01f * constrain_float((rawGyroRates.y - omegaAcrossFlowTime.y),-0.1f,0.1f);
+    // perform a health test of the range finder
+    checkRngHealth(rawSonarRange);
+    // check for takeoff if relying on optical flow and zero measurements until takeoff detected
+    // if we haven't taken off - constrain position and velocity states
+    if (_fusionModeGPS == 3) {
+        detectOptFlowTakeoff();
+    }
     // don't use data with a low quality indicator or extreme rates (helps catch corrupt sensor data)
-    // accept low flow quality data when very close to the ground as the lens will be out of focus
-    if (((rawFlowQuality > 0) || (rawSonarRange < (2.0f * RNG_MEAS_ON_GND))) && rawFlowRates.length() < 4.2f && rawGyroRates.length() < 4.2f) {
+    if ((rawFlowQuality > 0) && rawFlowRates.length() < 4.2f && rawGyroRates.length() < 4.2f) {
         // recall vehicle states at mid sample time for flow observations allowing for delays
         RecallStates(statesAtFlowTime, imuSampleTime_ms - _msecFLowDelay - flowTimeDeltaAvg_ms/2);
         // calculate rotation matrices at mid sample time for flow observations
@@ -4208,17 +4228,15 @@ void NavEKF::writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRates, V
         newDataFlow = false;
     }
     // Use range finder if 3 or more consecutive good samples. This reduces likelihood of using bad data.
-    if ((rangeHealth >= 3) || !vehicleArmed) {
+    if (rangeHealth >= 3) {
         statesAtRngTime = statesAtFlowTime;
-        rngMea = rawSonarRange;
+        rngMea = max(rawSonarRange,(_rngOnGnd_cm * 0.01f));
         newDataRng = true;
         rngValidMeaTime_ms = imuSampleTime_ms;
     } else {
         // set flag that will trigger fusion of height data
         newDataRng = false;
     }
-    // perform a health test of the range finder
-    checkRngHealth(rawSonarRange);
 }
 
 // calculate the NED earth spin vector in rad/sec
@@ -4509,7 +4527,7 @@ void NavEKF::InitialiseVariables()
     gndEffectMode = false;
     gpsSpdAccuracy = 0.0f;
     baroHgtOffset = 0.0f;
-    rngSensorHealthy = false;
+    optFlowRngHealthy = false;
     minHgtPreFlight = 0.0f;
     maxHgtPreFlight = 0.0f;
 
@@ -4666,8 +4684,9 @@ void  NavEKF::getFilterStatus(nav_filter_status &status) const
     status.flags.vert_pos = !hgtTimeout && filterHealthy;            // vertical position estimate valid
     status.flags.terrain_alt = gndOffsetValid && filterHealthy;		// terrain height estimate valid
     status.flags.const_pos_mode = constPosMode && filterHealthy;     // constant position mode
-    status.flags.pred_horiz_pos_rel = (optFlowNavPossible || gpsNavPossible) && filterHealthy && rngSensorHealthy; // we should be able to estimate a relative position when we enter flight mode
+    status.flags.pred_horiz_pos_rel = (optFlowNavPossible || gpsNavPossible) && filterHealthy && optFlowRngHealthy; // we should be able to estimate a relative position when we enter flight mode
     status.flags.pred_horiz_pos_abs = gpsNavPossible && filterHealthy; // we should be able to estimate an absolute position when we enter flight mode
+    status.flags.takeoff_detected = takeOffDetected; // takeoff for optical flow navigation has been detected
 }
 
 // send an EKF_STATUS message to GCS
@@ -4717,6 +4736,8 @@ void NavEKF::performArmingChecks()
         }
         // zero stored velocities used to do dead-reckoning
         heldVelNE.zero();
+        // reset the flag that indicates takeoff for use by optical flow navigation
+        takeOffDetected = false;
         // set various  useage modes based on the condition at arming. These are then held until the vehicle is disarmed.
         if (!vehicleArmed) {
             PV_AidingMode = AID_NONE; // When dis-armed, we only estimate orientation & height using the constant position mode
@@ -4744,6 +4765,10 @@ void NavEKF::performArmingChecks()
             }
             // this avoids issues casued by the time delay associated with arming that can trigger short timeouts
             rngValidMeaTime_ms = imuSampleTime_ms;
+            // store the range finder measurement which will be used as a reference to detect when we have taken off
+            rangeAtArming = rngMea;
+            // set the time at which we arm to assist with takeoff detection
+            timeAtArming_ms =  imuSampleTime_ms;
         } else { // arming when GPS useage is allowed
             if (gpsNotAvailable) {
                 PV_AidingMode = AID_NONE; // we don't have have GPS data and will only be able to estimate orientation and height
@@ -4899,11 +4924,28 @@ void NavEKF::checkRngHealth(float rawRange)
         minHgtPreFlight = min(rawRange * Tnb_flow.c.z, minHgtPreFlight);
         maxHgtPreFlight = max(rawRange * Tnb_flow.c.z, maxHgtPreFlight);
         // Check that the range sensor has been exercised through a realistic range of movement
-        bool rangeExtentPassed = ((maxHgtPreFlight - minHgtPreFlight) > 0.5f) && (maxHgtPreFlight < 2.0f) && (minHgtPreFlight < 2.0f * RNG_MEAS_ON_GND);
+        bool rangeExtentPassed = ((maxHgtPreFlight - minHgtPreFlight) > 0.5f) && (maxHgtPreFlight < 2.0f) && (minHgtPreFlight < (_rngOnGnd_cm * 0.01f + 0.1f)) && (minHgtPreFlight > (_rngOnGnd_cm * 0.01f - 0.1f));
         // latch to a passed condition (it can be failed later in flight)
-        rngSensorHealthy = rngSensorHealthy || rangeExtentPassed;
-    } else if (vehicleArmed && ((imuSampleTime_ms - rngValidMeaTime_ms) > 5000)) {
-        rngSensorHealthy = false;
+        optFlowRngHealthy = optFlowRngHealthy || rangeExtentPassed;
+    }
+}
+
+// Detect takeoff for optical flow navigation
+void NavEKF::detectOptFlowTakeoff(void)
+{
+    if (vehicleArmed && !takeOffDetected && (imuSampleTime_ms - timeAtArming_ms) > 1000) {
+        const AP_InertialSensor &ins = _ahrs->get_ins();
+        Vector3f angRateVec;
+        Vector3f gyroBias;
+        getGyroBias(gyroBias);
+        bool dual_ins = ins.get_gyro_health(0) && ins.get_gyro_health(1);
+        if (dual_ins) {
+                angRateVec = (ins.get_gyro(0) + ins.get_gyro(1)) * 0.5f - gyroBias;
+        } else {
+                angRateVec = ins.get_gyro() - gyroBias;
+        }
+
+        takeOffDetected = (takeOffDetected || (angRateVec.length() > 0.1f) || (rngMea > (rangeAtArming + 0.1f)));
     }
 }
 
