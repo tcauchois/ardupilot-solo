@@ -957,7 +957,14 @@ void NavEKF::SelectFlowFusion()
     gndOffsetValid = ((imuSampleTime_ms - gndHgtValidTime_ms) < 5000);
     // Perform tilt check
     bool tiltOK = (Tnb_flow.c.z > DCM33FlowMin);
-
+    // Constrain measurements to zero if we are using optical flow and are on the ground
+    if (_fusionModeGPS == 3 && !takeOffDetected && vehicleArmed) {
+        flowRadXYcomp[0]    = 0.0f;
+        flowRadXYcomp[1]    = 0.0f;
+        flowRadXY[0]        = 0.0f;
+        flowRadXY[1]        = 0.0f;
+        omegaAcrossFlowTime.zero();
+    }
     // if we don't have valid flow measurements and are relying on them, dead reckon using current velocity vector
     // If the flow measurements have been rejected for too long and we are relying on them, then reset the velocities to an estimate based on the flow and range data
     if (!flowDataValid && PV_AidingMode == AID_RELATIVE) {
@@ -3938,14 +3945,6 @@ void NavEKF::ConstrainStates()
     for (uint8_t i=19; i<=21; i++) states[i] = constrain_float(states[i],-0.5f,0.5f);
     // constrain the terrain offset state
     terrainState = max(terrainState, statesAtFlowTime.position[2] + (_rngOnGnd_cm * 0.01f));
-    // Constrain position and velocity states to zero if we are using optical flow and are on the ground
-    if (_fusionModeGPS == 3 && !takeOffDetected && vehicleArmed) {
-        state.velocity.x = 0.0f;
-        state.velocity.y = 0.0f;
-        state.position.x = 0.0f;
-        state.position.y = 0.0f;
-    }
-
 }
 
 // update IMU delta angle and delta velocity measurements
