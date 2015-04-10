@@ -4204,8 +4204,6 @@ void NavEKF::writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRates, V
     }
     // don't use data with a low quality indicator or extreme rates (helps catch corrupt sensor data)
     if ((rawFlowQuality > 0) && rawFlowRates.length() < 4.2f && rawGyroRates.length() < 4.2f) {
-        // recall vehicle states at mid sample time for flow observations allowing for delays
-        RecallStates(statesAtFlowTime, imuSampleTime_ms - _msecFLowDelay - flowTimeDeltaAvg_ms/2);
         // calculate rotation matrices at mid sample time for flow observations
         statesAtFlowTime.quat.rotation_matrix(Tbn_flow);
         Tnb_flow = Tbn_flow.transposed();
@@ -4226,6 +4224,8 @@ void NavEKF::writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRates, V
     } else {
         newDataFlow = false;
     }
+    // recall vehicle states at mid sample time for flow observations allowing for delays
+    RecallStates(statesAtFlowTime, imuSampleTime_ms - _msecFLowDelay - flowTimeDeltaAvg_ms/2);
     // Use range finder if 3 or more consecutive good samples. This reduces likelihood of using bad data.
     if (rangeHealth >= 3) {
         statesAtRngTime = statesAtFlowTime;
