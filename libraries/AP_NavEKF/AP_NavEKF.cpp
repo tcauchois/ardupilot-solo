@@ -3944,7 +3944,7 @@ void NavEKF::ConstrainStates()
     // body magnetic field limit
     for (uint8_t i=19; i<=21; i++) states[i] = constrain_float(states[i],-0.5f,0.5f);
     // constrain the terrain offset state
-    terrainState = max(terrainState, statesAtFlowTime.position[2] + (_rngOnGnd_cm * 0.01f));
+    terrainState = max(terrainState, state.position.z + (_rngOnGnd_cm * 0.01f));
 }
 
 // update IMU delta angle and delta velocity measurements
