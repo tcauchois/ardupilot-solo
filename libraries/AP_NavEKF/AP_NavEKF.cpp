@@ -2645,9 +2645,12 @@ void NavEKF::EstimateTerrainOffset()
     // start performance timer
     perf_begin(_perf_OpticalFlowEKF);
 
+    // constrain height above ground to be above range measured on ground
+    float heightAboveGndEst = max((terrainState - state.position.z), (_rngOnGnd_cm * 0.01f));
+
     // calculate a predicted LOS rate squared
     float velHorizSq = sq(state.velocity.x) + sq(state.velocity.y);
-    float losRateSq = velHorizSq / sq(terrainState - state.position[2]);
+    float losRateSq = velHorizSq / sq(heightAboveGndEst);
 
     // don't update terrain offset state if there is no range finder and not generating enough LOS rate, or without GPS, as it is poorly observable
     if (!fuseRngData && (gpsNotAvailable || PV_AidingMode == AID_RELATIVE || velHorizSq < 25.0f || losRateSq < 0.01f || onGround)) {
