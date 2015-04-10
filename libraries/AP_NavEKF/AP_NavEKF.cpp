@@ -4107,15 +4107,23 @@ void NavEKF::readHgtData()
                 // calculate offset to baro data that enables baro to be used as a backup
                 // filter offset to reduce effect of baro noise and other transient errors on estimate
                 baroHgtOffset = 0.2f * (_baro.get_altitude() + state.position.z) + 0.8f * baroHgtOffset;
-            } else {
+            } else if (vehicleArmed && takeOffDetected) {
                 // use baro measurement and correct for baro offset - failsafe use only as baro will drift
                 hgtMea = max(_baro.get_altitude() - baroHgtOffset, (_rngOnGnd_cm * 0.01f));
                 // get states that were stored at the time closest to the measurement time, taking measurement delay into account
                 RecallStates(statesAtHgtTime, (imuSampleTime_ms - msecHgtDelay));
+            } else {
+                // If we are on ground and have no range finder reading, assume the nominal on-ground height
+                hgtMea = _rngOnGnd_cm * 0.01f;
+                // get states that were stored at the time closest to the measurement time, taking measurement delay into account
+                statesAtHgtTime = state;
+                // calculate offset to baro data that enables baro to be used as a backup
+                // filter offset to reduce effect of baro noise and other transient errors on estimate
+                baroHgtOffset = 0.2f * (_baro.get_altitude() + state.position.z) + 0.8f * baroHgtOffset;
             }
         } else {
             // use baro measurement and correct for baro offset
-            hgtMea = _baro.get_altitude() - baroHgtOffset;
+            hgtMea = _baro.get_altitude();
             // get states that were stored at the time closest to the measurement time, taking measurement delay into account
             RecallStates(statesAtHgtTime, (imuSampleTime_ms - msecHgtDelay));
         }
@@ -4205,13 +4213,14 @@ void NavEKF::writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRates, V
     if (_fusionModeGPS == 3) {
         detectOptFlowTakeoff();
     }
+    // recall vehicle states at mid sample time for flow observations allowing for delays
+    RecallStates(statesAtFlowTime, imuSampleTime_ms - _msecFLowDelay - flowTimeDeltaAvg_ms/2);
+    // calculate rotation matrices at mid sample time for flow observations
+    statesAtFlowTime.quat.rotation_matrix(Tbn_flow);
+    Tnb_flow = Tbn_flow.transposed();
     // don't use data with a low quality indicator or extreme rates (helps catch corrupt sensor data)
     if ((rawFlowQuality > 0) && rawFlowRates.length() < 4.2f && rawGyroRates.length() < 4.2f) {
-        // calculate rotation matrices at mid sample time for flow observations
-        statesAtFlowTime.quat.rotation_matrix(Tbn_flow);
-        Tnb_flow = Tbn_flow.transposed();
         // correct flow sensor rates for bias
-        
         omegaAcrossFlowTime.x = rawGyroRates.x - flowGyroBias.x;
         omegaAcrossFlowTime.y = rawGyroRates.y - flowGyroBias.y;
         // write uncorrected flow rate measurements that will be used by the focal length scale factor estimator
@@ -4227,12 +4236,16 @@ void NavEKF::writeOptFlowMeas(uint8_t &rawFlowQuality, Vector2f &rawFlowRates, V
     } else {
         newDataFlow = false;
     }
-    // recall vehicle states at mid sample time for flow observations allowing for delays
-    RecallStates(statesAtFlowTime, imuSampleTime_ms - _msecFLowDelay - flowTimeDeltaAvg_ms/2);
     // Use range finder if 3 or more consecutive good samples. This reduces likelihood of using bad data.
     if (rangeHealth >= 3) {
         statesAtRngTime = statesAtFlowTime;
         rngMea = max(rawSonarRange,(_rngOnGnd_cm * 0.01f));
+        newDataRng = true;
+        rngValidMeaTime_ms = imuSampleTime_ms;
+    } else if (!vehicleArmed) {
+        // if not armed we assume
+        statesAtRngTime = statesAtFlowTime;
+        rngMea = _rngOnGnd_cm * 0.01f;
         newDataRng = true;
         rngValidMeaTime_ms = imuSampleTime_ms;
     } else {
@@ -4934,7 +4947,7 @@ void NavEKF::checkRngHealth(float rawRange)
         minHgtPreFlight = min(rawRange * Tnb_flow.c.z, minHgtPreFlight);
         maxHgtPreFlight = max(rawRange * Tnb_flow.c.z, maxHgtPreFlight);
         // Check that the range sensor has been exercised through a realistic range of movement
-        bool rangeExtentPassed = ((maxHgtPreFlight - minHgtPreFlight) > 0.5f) && (maxHgtPreFlight < 2.0f) && (minHgtPreFlight < (_rngOnGnd_cm * 0.01f + 0.1f)) && (minHgtPreFlight > (_rngOnGnd_cm * 0.01f - 0.1f));
+        bool rangeExtentPassed = ((maxHgtPreFlight - minHgtPreFlight) > 0.5f) && (maxHgtPreFlight < 2.0f) && (minHgtPreFlight < (_rngOnGnd_cm * 0.01f + 0.1f));
         // latch to a passed condition (it can be failed later in flight)
         optFlowRngHealthy = optFlowRngHealthy || rangeExtentPassed;
     }
