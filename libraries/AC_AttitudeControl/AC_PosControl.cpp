@@ -177,7 +177,7 @@ void AC_PosControl::set_alt_target_from_climb_rate(float climb_rate_cms, float d
 /// relax_alt_hold_controllers - set all desired and targets to measured
 void AC_PosControl::relax_alt_hold_controllers(float throttle_setting)
 {
-    _pos_target.z = _inav.get_altitude();
+    _pos_target.z = _inav.get_altitude()-_gnd_effect_pos_corr_z;
     _vel_desired.z = 0.0f;
     _vel_target.z= _inav.get_velocity_z();
     _vel_last.z = _inav.get_velocity_z();
