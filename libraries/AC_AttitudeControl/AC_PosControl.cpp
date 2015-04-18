@@ -203,7 +203,6 @@ void AC_PosControl::set_target_to_stopping_point_z()
 
     get_stopping_point_z(_pos_target);
     _gnd_effect_pos_corr_z = 0.0f;
-    _vel_desired.z = 0.0f;
 }
 
 /// get_stopping_point_z - calculates stopping point based on current position, velocity, vehicle acceleration
@@ -218,6 +217,7 @@ void AC_PosControl::get_stopping_point_z(Vector3f& stopping_point) const
     // if position controller is active add current velocity error to avoid sudden jump in acceleration
     if (is_active_z()) {
         curr_vel_z += _vel_error.z;
+        curr_vel_z -= _vel_desired.z;
     }
 
     // calculate the velocity at which we switch from calculating the stopping point using a linear function to a sqrt function
