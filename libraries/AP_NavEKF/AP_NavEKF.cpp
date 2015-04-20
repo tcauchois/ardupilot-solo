@@ -4973,7 +4973,7 @@ void NavEKF::groundEffectCorrections(void)
     } else if (!vehicleArmed && prevVehicleArmed) {
         // Reset filtered takeoff height reference when vehicle disarms as it will have changed
         meaHgtAtTakeOff = hgtMea;
-    } else if (!vehicleArmed) {
+    } else if (!vehicleArmed && newDataHgt) {
         // Filter the measured height to provide a height at commencement of takeoff
         meaHgtAtTakeOff = 0.1f * hgtMea + 0.9f * meaHgtAtTakeOff;
     }
