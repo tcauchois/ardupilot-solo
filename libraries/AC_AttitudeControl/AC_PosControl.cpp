@@ -986,6 +986,8 @@ void AC_PosControl::init_gnd_effect_mode()
 // this reduces the sensitivity to baro noise and transient errors in ground effect
 void AC_PosControl::setGndEffectMode(bool gndEffectMode)
 {
+    _gnd_effect_mode = false;
+    /*
     if(_gnd_effect_mode != gndEffectMode) {
         if(gndEffectMode) {
             init_gnd_effect_mode();
@@ -1002,4 +1004,5 @@ void AC_PosControl::setGndEffectMode(bool gndEffectMode)
         }
     }
     _gnd_effect_mode = gndEffectMode;
+    */
 }
