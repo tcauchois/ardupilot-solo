@@ -752,6 +752,9 @@ void NavEKF::UpdateFilter()
     SelectTasFusion();
     SelectBetaFusion();
 
+    // Apply ground effect corrections
+    groundEffectCorrections();
+
     // stop the timer used for load measurement
     perf_end(_perf_UpdateFilter);
 }
@@ -1276,7 +1279,9 @@ void NavEKF::CovariancePrediction()
     }
     // scale accel bias noise when disarmed to allow for faster bias estimation
     processNoise[13] = dVelBiasSigma;
-    if (!vehicleArmed) {
+     if (gndEffectTakeOff) {
+         processNoise[13] = 0.0f;
+     } else if (!vehicleArmed) {
         processNoise[13] *= accelBiasNoiseScaler;
     }
     for (uint8_t i=14; i<=15; i++) processNoise[i] = windVelSigma;
@@ -2171,7 +2176,7 @@ void NavEKF::FuseVelPosNED()
                 // Only height observations are used to update z accel bias estimate
                 // Protect Kalman gain from ill-conditioning
                 // Don't update Z accel bias if off-level by greater than 60 degrees to avoid scale factor error effects
-                if (obsIndex == 5 && prevTnb.c.z > 0.5f) {
+                if ((obsIndex == 5 || obsIndex == 3) && prevTnb.c.z > 0.5f && !gndEffectTakeOff) {
                     Kfusion[13] = constrain_float(P[13][stateIndex]*SK,-1.0f,0.0f);
                 } else {
                     Kfusion[13] = 0.0f;
@@ -4146,6 +4151,10 @@ void NavEKF::readHgtData()
             hgtMea = _baro.get_altitude() - baroHgtOffset;
             // get states that were stored at the time closest to the measurement time, taking measurement delay into account
             RecallStates(statesAtHgtTime, (imuSampleTime_ms - msecHgtDelay));
+            // constrain baro alt to be above the value at takeoff if ground effect compensation is active
+            if (gndEffectTakeOff) {
+                hgtMea = max(hgtMea, meaHgtAtTakeOff);
+            }
         }
         // set flag to let other functions know new data has arrived
         newDataHgt = true;
@@ -4560,6 +4569,7 @@ void NavEKF::InitialiseVariables()
     gpsSpdAccuracy = 0.0f;
     baroHgtOffset = 0.0f;
     gpsAidingBad = false;
+    gndEffectTakeOff = false;
 }
 
 // return true if we should use the airspeed sensor
@@ -4814,12 +4824,18 @@ void NavEKF::performArmingChecks()
                 lastPosFailTime = 0;
             }
         }
-        // Reset filter positon, height and velocity states on arming or disarming
-        ResetVelocity();
-        ResetPosition();
-        baroHgtOffset = 0.0f;
-        //ResetHeight();
-        StoreStatesReset();
+        if (vehicleArmed) {
+            // Reset filter position to GPS when transitioning into flight mode
+            // We need to do this becasue the vehicle may have moved since the EKF origin was set
+            ResetPosition();
+            StoreStatesReset();
+        } else {
+            // Reset all position and velocity states when transitioning out of flight mode
+            // We need to do this becasue we are going into a mode that assumes zero position and velocity
+            ResetVelocity();
+            ResetPosition();
+            StoreStatesReset();
+        }
 
     } else if (vehicleArmed && !firstMagYawInit && state.position.z < -1.5f && !assume_zero_sideslip()) {
         // Do the first in-air yaw and earth mag field initialisation when the vehicle has gained 1.5m of altitude after arming if it is a non-fly forward vehicle (vertical takeoff)
@@ -4940,6 +4956,58 @@ bool NavEKF::calcGpsGoodToAlign(void)
         return true;
     } else {
         return false;
+    }
+}
+
+// Check if takeoff has been completed and apply ground effect corrections
+void NavEKF::groundEffectCorrections(void)
+{
+    static bool takeOffCompleted;
+    static Vector3f posAtArming;
+    static uint32_t timeAtArming_ms;
+    // TODO implement a initiation of takeoff detect using arm status and throttle. Use arming as a surrogate until this is implemented.
+    if (!prevVehicleArmed && vehicleArmed) {
+        takeOffCompleted = false;
+        posAtArming = state.position;
+        timeAtArming_ms = imuSampleTime_ms;
+    } else if (!vehicleArmed) {
+        // Filter the measured height to provide a height at commencement of takeoff
+        meaHgtAtTakeOff = 0.1f * hgtMea + 0.9f * meaHgtAtTakeOff;
+    }
+    if (vehicleArmed && !takeOffCompleted && (imuSampleTime_ms - timeAtArming_ms) > 500) {
+        uint8_t tempSum = 0;
+        const AP_InertialSensor &ins = _ahrs->get_ins();
+        Vector3f angRateVec;
+        Vector3f gyroBias;
+        getGyroBias(gyroBias);
+        bool dual_ins = ins.get_gyro_health(0) && ins.get_gyro_health(1);
+        if (dual_ins) {
+                angRateVec = (ins.get_gyro(0) + ins.get_gyro(1)) * 0.5f - gyroBias;
+        } else {
+                angRateVec = ins.get_gyro() - gyroBias;
+        }
+        // check for rotational movement
+        if (angRateVec.length() > 0.1f) {
+            tempSum ++;
+        }
+        // check for height change, either positive filter state or large negative baro
+        if ((posAtArming.z - state.position.z > 1.0f) || (meaHgtAtTakeOff - hgtMea > 5.0f)) {
+            tempSum ++;
+        }
+        // check for total displacement
+        if ((state.position - posAtArming).length() > 5.0f) {
+            tempSum ++;
+        }
+        // Latch takeoff detected if 2 or more checks pass
+        takeOffCompleted = (takeOffCompleted || (tempSum >= 2));
+    }
+    // If ground effect mode is active and we haven't completed takeoff, then
+    // - constrain measured height to be above the value at takeoff (use arm event as a surrogate until a better method using throttle can be implemented
+    // - stop vertical accel bias learning
+    if (gndEffectMode && vehicleArmed && !takeOffCompleted) {
+        gndEffectTakeOff = true;
+    } else {
+        gndEffectTakeOff = false;
     }
 }
 

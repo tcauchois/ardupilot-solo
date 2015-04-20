@@ -424,6 +424,9 @@ private:
     // Assess GPS data quality and return true if good enough to align the EKF
     bool calcGpsGoodToAlign(void);
 
+    // Check if takeoff has been completed
+    void groundEffectCorrections(void);
+
     // EKF Mavlink Tuneable Parameters
     AP_Float _gpsHorizVelNoise;     // GPS horizontal velocity measurement noise : m/s
     AP_Float _gpsVertVelNoise;      // GPS vertical velocity measurement noise : m/s
@@ -632,6 +635,7 @@ private:
     Vector3f lastMagOffsets;        // magnetometer offsets returned by compass object from previous update
     bool gpsAidingBad;              // true when GPS position measurements have been consistently rejected by the filter
     uint32_t lastGpsAidBadTime_ms;  // time in msec gps aiding was last detected to be bad
+    bool gndEffectTakeOff;          // true when accelerometer bias states are to remain constant
 
     // Used by smoothing of state corrections
     Vector10 gpsIncrStateDelta;    // vector of corrections to attitude, velocity and position to be applied over the period between the current and next GPS measurement
@@ -699,6 +703,7 @@ private:
     bool gndOffsetValid;            // true when the ground offset state can still be considered valid
     bool flowXfailed;               // true when the X optical flow measurement has failed the innovation consistency check
     float baroHgtOffset;            // offset applied when baro height used as a backup height reference if range-finder fails
+    float meaHgtAtTakeOff;          // height measured at commencement of takeoff
 
     bool haveDeltaAngles;
 
