@@ -4024,7 +4024,7 @@ bool NavEKF::readDeltaAngle(uint8_t ins_index, Vector3f &dAng) {
 
     if (ins_index < ins.get_gyro_count()) {
         if (!ins.get_delta_angle(ins_index,dAng)) {
-            dAng = ins.get_accel(ins_index) * dtIMUactual;
+            dAng = ins.get_gyro(ins_index) * dtIMUactual;
         }
         return true;
     }
