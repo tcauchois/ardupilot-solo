@@ -71,6 +71,8 @@ bool PX4Util::run_debug_shell(AP_HAL::BetterStream *stream)
  */
 enum PX4Util::safety_state PX4Util::safety_switch_state(void)
 {
+    return AP_HAL::Util::SAFETY_ARMED;
+    /*
     if (_safety_handle == -1) {
         _safety_handle = orb_subscribe(ORB_ID(safety));
     }
@@ -88,6 +90,7 @@ enum PX4Util::safety_state PX4Util::safety_switch_state(void)
         return AP_HAL::Util::SAFETY_ARMED;
     }
     return AP_HAL::Util::SAFETY_DISARMED;
+    */
 }
 
 void PX4Util::set_system_clock(uint64_t time_utc_usec)
