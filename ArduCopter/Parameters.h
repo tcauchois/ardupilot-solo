@@ -194,6 +194,7 @@ public:
         k_param_ch12_option,     // 123
         k_param_takeoff_trigger_dz,
         k_param_gcs3,            // 125
+        k_param_rtl_speed_cms,
 
         //
         // 140: Sensor parameters
@@ -350,6 +351,7 @@ public:
     AP_Float        pilot_takeoff_alt;
 
     AP_Int16        rtl_altitude;
+    AP_Int16        rtl_speed_cms;
     AP_Float        sonar_gain;
 
     AP_Int8         failsafe_battery_enabled;   // battery failsafe enabled
