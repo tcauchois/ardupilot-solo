@@ -285,7 +285,8 @@ AP_InertialSensor::AP_InertialSensor() :
     _hil_mode(false),
     _calibrating(false),
     _log_raw_data(false),
-    _dataflash(NULL)
+    _dataflash(NULL),
+    _startup_error_counts_set(false)
 {
     AP_Param::setup_object_defaults(this, var_info);        
     for (uint8_t i=0; i<INS_MAX_BACKENDS; i++) {
@@ -297,6 +298,8 @@ AP_InertialSensor::AP_InertialSensor() :
     }
     memset(_delta_velocity_valid,0,sizeof(_delta_velocity_valid));
     memset(_delta_angle_valid,0,sizeof(_delta_angle_valid));
+    memset(_accel_startup_error_count,0,sizeof(_accel_startup_error_count));
+    memset(_gyro_startup_error_count,0,sizeof(_gyro_startup_error_count));
 }
 
 
