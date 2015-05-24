@@ -912,6 +912,8 @@ static void fast_loop()
 
     // check if we've landed
     update_land_detector();
+
+    update_motor_fail_detector();
 }
 
 // rc_loops - reads user input from transmitter/receiver
