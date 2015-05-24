@@ -1,7 +1,7 @@
 /// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 
 #define MOT_RECOVERY_HIGH_MOTOR_THRESHOLD .95f
-#define MOT_RECOVERY_LOW_AVG_THRESHOLD .7f
+#define MOT_RECOVERY_LOW_AVG_THRESHOLD .8f
 #define MOT_RECOVERY_DETECTION_TIME 0.25f
 #define MOT_RECOVERY_MOTOR_PCT 0.5f
 #define MOT_RECOVERY_RAMP_TIME 0.25f
