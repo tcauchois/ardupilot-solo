@@ -34,10 +34,9 @@ void update_motor_fail_detector() {
     motor_avg /= motor_count;
 
     bool motor_fail_criteria_met = (highest_motor >= MOT_RECOVERY_HIGH_MOTOR_THRESHOLD) && (motor_avg <= MOT_RECOVERY_LOW_AVG_THRESHOLD);
-
-    if (motor_fail_criteria_met && tnow_ms-motor_fail_start_time > MOT_RECOVERY_DETECTION_TIME*1.0e3f) {
-        motors.do_motor_recovery((1<<highest_motor_index), MOT_RECOVERY_MOTOR_PCT, MOT_RECOVERY_RAMP_TIME);
-    } else {
+    if (!motor_fail_criteria_met) {
         motor_fail_start_time = tnow_ms;
+    } else if(tnow_ms-motor_fail_start_time > MOT_RECOVERY_DETECTION_TIME*1.0e3f) {
+        motors.do_motor_recovery((1<<highest_motor_index), MOT_RECOVERY_MOTOR_PCT, MOT_RECOVERY_RAMP_TIME);
     }
 }
