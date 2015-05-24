@@ -2,6 +2,9 @@
 
 #define MOT_RECOVERY_HIGH_MOTOR_THRESHOLD .95f
 #define MOT_RECOVERY_LOW_AVG_THRESHOLD .7f
+#define MOT_RECOVERY_DETECTION_TIME 0.25f
+#define MOT_RECOVERY_MOTOR_PCT 0.5f
+#define MOT_RECOVERY_RAMP_TIME 0.25f
 
 uint32_t motor_fail_start_time = 0;
 
@@ -32,8 +35,8 @@ void update_motor_fail_detector() {
 
     bool motor_fail_criteria_met = (highest_motor >= MOT_RECOVERY_HIGH_MOTOR_THRESHOLD) && (motor_avg <= MOT_RECOVERY_LOW_AVG_THRESHOLD);
 
-    if (motor_fail_criteria_met && tnow_ms-motor_fail_start_time > 250) {
-        motors.do_motor_recovery((1<<highest_motor_index), 0.5f, 0.25f);
+    if (motor_fail_criteria_met && tnow_ms-motor_fail_start_time > MOT_RECOVERY_DETECTION_TIME*1.0e3f) {
+        motors.do_motor_recovery((1<<highest_motor_index), MOT_RECOVERY_MOTOR_PCT, MOT_RECOVERY_RAMP_TIME);
     } else {
         motor_fail_start_time = tnow_ms;
     }
