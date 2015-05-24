@@ -8,6 +8,9 @@
 
 static uint8_t auto_disarming_counter;
 
+// motor fault status: 1 base index of faulty motor, eg 3 means motor 3 is unhealthy, 0 indicates all motors healthy
+static uint8_t motor_fault_status;
+
 // arm_motors_check - checks for pilot input to arm or disarm the copter
 // called at 10hz
 static void arm_motors_check()
@@ -811,4 +814,44 @@ static void lost_vehicle_check()
             AP_Notify::flags.vehicle_lost = false;
         }
     }
+}
+
+// check for quad motor failure
+static void quad_motor_fail_check()
+{
+    // start time of failure period
+    static uint32_t last_healthy_time_ms;
+
+    // check for a saturated motor with average of remaining motors below 75%
+    bool high_motor_condition = false;
+    uint8_t faulty_motor_index;
+    for (uint8_t i=0; i<=4; i++) {
+        // calculate sum of 3 motors
+        uint16_t sum_of_three;
+        for (uint8_t j=0; j<=4; j++) {
+            if (i != j) {
+                sum_of_three += hal.rcout->read(j);
+            }
+        }
+        if (sum_of_three < 4500 && hal.rcout->read(i) >= 1890) {
+            high_motor_condition = true;
+            faulty_motor_index = i;
+        }
+    }
+
+    // check for saturated throttle
+    bool high_throttle_condition = g.rc_3.servo_out >= (g.rc_3.radio_max - 1);
+
+    // if high throttle and motor condition are true, don't update last healthy time
+    if (!high_throttle_condition || !high_motor_condition) {
+        last_healthy_time_ms =  hal.scheduler->micros();
+    }
+
+    // if unhealthy for more than 1 second, declare a fault condition, specifying the bad motor
+    if (hal.scheduler->micros() - last_healthy_time_ms > 1000) {
+        motor_fault_status = faulty_motor_index + 1;
+    } else {
+        motor_fault_status = 0;
+    }
+
 }
