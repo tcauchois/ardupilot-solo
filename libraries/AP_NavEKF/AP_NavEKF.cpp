@@ -816,7 +816,7 @@ void NavEKF::SelectVelPosFusion()
         if (newDataGps && (PV_AidingMode == AID_ABSOLUTE)) {
             // reset data arrived flag
             newDataGps = false;
-            // reset state updates and counter used to spread fusion updates across several frames to reduce 10Hz pulsing
+            // reset state updates and counter used to spread fusion updates across several frames to reduce 5Hz pulsing
             memset(&gpsIncrStateDelta[0], 0, sizeof(gpsIncrStateDelta));
             gpsUpdateCount = 0;
             // use both if GPS use is enabled
@@ -840,35 +840,30 @@ void NavEKF::SelectVelPosFusion()
             fuseVelData = false;
             fusePosData = false;
         }
-    } else if (constPosMode && covPredStep) {
-        // In constant position mode use synthetic position and velocity measurements set to zero
-        // Only fuse synthetic position measurements when rate of change of velocity is less than 0.5g to reduce attitude errors due to launch acceleration
-        // Only fuse synthetic velocity measurements when on the ground to reduce attitude errors due to short term manoeuvres
-        if (!vehicleArmed) {
-            fuseVelData = true;
-        } else {
-            fuseVelData = false;
-        }
+    } else if ((PV_AidingMode == AID_NONE) && (imuSampleTime_ms - lastConstPosTime_ms) > msecGpsAvg) {
+        lastConstPosTime_ms = imuSampleTime_ms;
+        // in constant position mode use synthetic GPS position measurements set to zero
+        // only fuse synthetic measurements when rate of change of velocity is less than 0.5g to reduce attitude errors due to launch acceleration
         if (accNavMag < 4.9f) {
             fusePosData = true;
+            // if constant position mode use the current states to calculate the predicted
+            // measurement to improve filter stability
+            statesAtPosTime = state;
         } else {
             fusePosData = false;
         }
-    } else if (constVelMode && covPredStep) {
-        // In constant velocity mode we fuse the last valid velocity vector
-        // Reset the stored velocity vector when we enter the mode
-        if (constVelMode && !lastConstVelMode) {
-            heldVelNE.x = state.velocity.x;
-            heldVelNE.y = state.velocity.y;
-        }
-        lastConstVelMode = constVelMode;
-        // We do not fuse when manoeuvring to avoid corrupting the attitude
-        if (accNavMag < 4.9f) {
-            fuseVelData = true;
-        } else {
+        // do not use velocity fusion after arming to reduce the effect of movement on attitude
+        if(vehicleArmed) {
             fuseVelData = false;
+        } else {
+            fuseVelData = true;
+            // if constant position mode use the current states to calculate the predicted
+            // measurement to improve filter stability
+            statesAtVelTime = state;
         }
-        fusePosData = false;
+        // reset state updates and counter used to spread fusion updates across several frames to reduce 5Hz pulsing
+        memset(&gpsIncrStateDelta[0], 0, sizeof(gpsIncrStateDelta));
+        gpsUpdateCount = 0;
     } else {
         fuseVelData = false;
         fusePosData = false;
@@ -1911,35 +1906,23 @@ void NavEKF::FuseVelPosNED()
     // associated with sequential fusion
     if (fuseVelData || fusePosData || fuseHgtData) {
 
-        // if constant position or constant velocity mode use the current states to calculate the predicted
-        // measurement rather than use states from a previous time. We need to do this
-        // because there may be no stored states due to lack of real measurements.
-        if (constPosMode) {
-            statesAtPosTime = state;
-            statesAtVelTime = state;
-        } else if (constVelMode) {
-            statesAtVelTime = state;
-        }
-
         // set the GPS data timeout depending on whether airspeed data is present
         uint32_t gpsRetryTime;
         if (useAirspeed()) gpsRetryTime = gpsRetryTimeUseTAS;
         else gpsRetryTime = gpsRetryTimeNoTAS;
 
-        // form the observation vector and zero velocity and horizontal position observations if in constant position mode
-        // If in constant velocity mode, hold the last known horizontal velocity vector
-        if (!constPosMode && !constVelMode) {
+        // form the observation vector
+        if (PV_AidingMode == AID_ABSOLUTE) {
             observation[0] = velNED.x + gpsVelGlitchOffset.x;
             observation[1] = velNED.y + gpsVelGlitchOffset.y;
             observation[2] = velNED.z;
             observation[3] = gpsPosNE.x + gpsPosGlitchOffsetNE.x;
             observation[4] = gpsPosNE.y + gpsPosGlitchOffsetNE.y;
-        } else if (constPosMode){
-            for (uint8_t i=0; i<=4; i++) observation[i] = 0.0f;
-        } else if (constVelMode) {
-            observation[0] = heldVelNE.x;
-            observation[1] = heldVelNE.y;
-            for (uint8_t i=2; i<=4; i++) observation[i] = 0.0f;
+        } else {
+            // if we are not doing absolute position aiding, we synthesise zero position and velocity measurements
+            for (uint8_t i=0; i<=4; i++) {
+                observation[i] = 0.0f;
+            }
         }
         observation[5] = -hgtMea;
 
@@ -2625,10 +2608,10 @@ void NavEKF::FuseMagnetometer()
             if (vehicleArmed && ((PV_AidingMode == AID_NONE) || highYawRate) && j <= 3) {
                 Kfusion[j] *= 4.0f;
             }
-            // We don't need to spread corrections for non-dynamic states or if we are in a  constant postion mode
+            // We don't need to spread corrections for non-dynamic states
             // We can't spread corrections if there is not enough time remaining
             // We don't spread corrections to attitude states if we are rotating rapidly
-            if ((j <= 3 && highRates) || j >= 10 || constPosMode || minorFramesToGo < 1.5f ) {
+            if ((j <= 3 && highRates) || j >= 10 || minorFramesToGo < 1.5f ) {
                 states[j] = states[j] - Kfusion[j] * innovMag[obsIndex];
             } else {
                 // scale the correction based on the number of averaging frames left to go
@@ -4580,6 +4563,7 @@ void NavEKF::InitialiseVariables()
     ekfStartTime_ms = imuSampleTime_ms;
     lastGpsVelFail_ms = 0;
     lastGpsAidBadTime_ms = 0;
+    lastConstPosTime_ms = 0;
 
     // initialise other variables
     gpsNoiseScaler = 1.0f;
