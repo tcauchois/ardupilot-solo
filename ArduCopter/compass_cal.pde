@@ -27,6 +27,7 @@ static void compass_cal_update() {
     } else {
         if(tnow-stick_gesture_begin > 1000*COMPASS_CAL_STICK_DELAY) {
             compass.start_calibration_all(true,true,COMPASS_CAL_DELAY);
+            camera_mount.set_mode(MAV_MOUNT_MODE_RETRACT);
         }
     }
 }
