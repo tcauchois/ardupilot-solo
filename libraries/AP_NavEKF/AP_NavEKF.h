@@ -657,14 +657,12 @@ private:
     struct Location EKF_origin;     // LLH origin of the NED axis system - do not change unless filter is reset
     bool validOrigin;               // true when the EKF origin is valid
     float gpsSpdAccuracy;           // estimated speed accuracy in m/s returned by the UBlox GPS receiver
-    uint32_t lastGpsVelFail_ms;     // time of last GPS vertical velocity consistency check fail
     Vector3f lastMagOffsets;        // magnetometer offsets returned by compass object from previous update
     bool gpsAidingBad;              // true when GPS position measurements have been consistently rejected by the filter
     uint32_t lastGpsAidBadTime_ms;  // time in msec gps aiding was last detected to be bad
     float posDownAtArming;          // flight vehicle vertical position at arming used as a reference point
     bool highYawRate;               // true when the vehicle is doing rapid yaw rotation where gyro scel factor errors could cause loss of heading reference
     float yawRateFilt;              // filtered yaw rate used to determine when the vehicle is doing rapid yaw rotation where gyro scel factor errors could cause loss of heading reference
-    struct Location gpsloc_prev;    // LLH location of previous GPS measurement
 
     // Used by smoothing of state corrections
     Vector10 gpsIncrStateDelta;    // vector of corrections to attitude, velocity and position to be applied over the period between the current and next GPS measurement

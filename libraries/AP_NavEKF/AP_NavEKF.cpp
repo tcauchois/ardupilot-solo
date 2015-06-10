@@ -4588,7 +4588,6 @@ void NavEKF::InitialiseVariables()
     prevFlowFuseTime_ms = imuSampleTime_ms;
     gndHgtValidTime_ms = 0;
     ekfStartTime_ms = imuSampleTime_ms;
-    lastGpsVelFail_ms = 0;
     lastGpsAidBadTime_ms = 0;
 
     // initialise other variables
@@ -5062,97 +5061,101 @@ void NavEKF::setTouchdownExpected(bool val)
 // Return true if all criteria pass for 10 seconds
 bool NavEKF::calcGpsGoodToAlign(void)
 {
-    // calculate absolute difference between GPS vert vel and inertial vert vel
-    float velDiffAbs;
+    static const float alignSpdAccMax = 1.0f; // maximum speed accuracy
+    static const float alignVertVelDiffMax = 1.0f; // maximum vertical velocity innovation
+    static const uint8_t alignSatsMin = 6; // minimum GPS satellites
+    static const float alignHAccMax = 5.0f; // maximum hAcc
+    static const float alignHDOPMax = 2.5f; // maximum hDOP
+    static const float alignMagTestMax = 1.0f; // maximum magnetometer test ratio
+    static const float alignDriftDecayTC = 10.0f; // time constant used to decay position drift
+    static const float alignDriftLimit = 10.0f; // maximum value of gpsDriftNE - limits persistence of very large jumps
+    static const float alignDriftMax = 3.0f; // maximum position drift
+    static const float alignVelFiltTC = 2.0f; // time constant used to filter gps vertical and horizontal velocity
+    static const float alignVelFiltLimit = 10.0f; // maximum value of gpsHorizVelFilt and gpsVertVelFilt
+    static const float alignVertVelMax = 0.3f; // maximum filtered vertical velocity while disarmed
+    static const float alignHorizVelMax = 0.3f; // maximum filtered horizontal velocity while disarmed
+
+    static bool firstCall = true;
+    static uint32_t lastAlignFail_ms = 0; // time of last alignment readiness check failure
+    static struct Location gpsloc_prev; // previous GPS location for drift calculation
+    static float gpsDriftHoriz = 0.0f; // amount of position drift detected
+    static float gpsVertVelFilt = 0.0f; // filtered gps vertical velocity
+    static float gpsHorizVelFilt = 0.0f; // filtered gps horizontal velocity
+
+    // compute delta delta time
+    static const float gpsDtAvg = msecGpsAvg*1.0e-3f;
+    float gpsDtActual = (lastFixTime_ms - secondLastFixTime_ms)*1.0e-3f;
+
+    // compute gpsDriftHoriz
+    float alignDriftAlpha = constrain_float(gpsDtActual/(gpsDtActual+alignDriftDecayTC), 0.0f, 1.0f);
+    const struct Location &gpsloc = _ahrs->get_gps().location(); // Current location
+    // sum distance moved
+    gpsDriftHoriz += location_diff(gpsloc_prev, gpsloc).length();
+    gpsloc_prev = gpsloc;
+    // decay distance moved exponentially to zero
+    gpsDriftHoriz += (0.0f-gpsDriftHoriz)*alignDriftAlpha;
+    // clamp the fiter state to prevent excessive persistence of large transients
+    gpsDriftHoriz = constrain_float(gpsDriftHoriz,0.0f,alignDriftLimit);
+
+    // compute gpsVertVelFilt and gpsHorizVelFilt
+    static const float alignVelFiltAlpha = constrain_float(gpsDtAvg/(gpsDtAvg+alignVelFiltTC),0.0f,1.0f);
     if (_ahrs->get_gps().have_vertical_velocity()) {
-        velDiffAbs = fabsf(velNED.z - state.velocity.z);
+        gpsVertVelFilt += (velNED.z-gpsVertVelFilt) * alignVelFiltAlpha;
+        gpsVertVelFilt = constrain_float(gpsVertVelFilt,-alignVelFiltLimit,alignVelFiltLimit);
     } else {
-        velDiffAbs = 0.0f;
+        gpsVertVelFilt = 0.0f;
     }
+    gpsHorizVelFilt = (pythagorous2(velNED.x,velNED.y) - gpsHorizVelFilt) * alignVelFiltAlpha;
+    gpsHorizVelFilt = constrain_float(gpsHorizVelFilt,-10.0f,10.0f);
 
-    // fail if velocity difference or reported speed accuracy greater than threshold
-    bool gpsVelFail = (velDiffAbs > 1.0f) || (gpsSpdAccuracy > 1.0f);
+    bool alignCheckFail = false;
 
-    // fail if not enough sats
-    bool numSatsFail = _ahrs->get_gps().num_sats() < 6;
+    // fail if speed accuracy too high
+    alignCheckFail = alignCheckFail || (gpsSpdAccuracy > alignSpdAccMax);
 
-    // fail if horiziontal position accuracy not sufficient
+    //fail if vertical velocity available and vertical velocity innovation too large
+    alignCheckFail = alignCheckFail || (_ahrs->get_gps().have_vertical_velocity() && (fabsf(velNED.z - state.velocity.z) > alignVertVelDiffMax));
+
+    // fail if speed accuracy unavailable and satellite geometry is poor
+    alignCheckFail = alignCheckFail || (is_zero(gpsSpdAccuracy) && _ahrs->get_gps().get_hdop() > alignHDOPMax*100.0f);
+
+    // fail if not enough GPS sats
+    alignCheckFail = alignCheckFail || _ahrs->get_gps().num_sats() < alignSatsMin;
+
+    // fail if horiziontal position accuracy is available and insufficient
     float hAcc = 0.0f;
-    bool hAccFail;
-    if (_ahrs->get_gps().horizontal_accuracy(hAcc)) {
-        hAccFail = hAcc > 5.0f;
-    } else {
-        hAccFail =  false;
-    }
-
-    // fail if satellite geometry is poor
-    bool hdopFail = _ahrs->get_gps().get_hdop() > 250;
+    alignCheckFail = alignCheckFail || (_ahrs->get_gps().horizontal_accuracy(hAcc) && (hAcc > alignHAccMax));
 
     // fail if magnetometer innovations are outside limits indicating bad yaw
     // with bad yaw we are unable to use GPS
-    bool yawFail;
-    if (magTestRatio.x > 1.0f || magTestRatio.y > 1.0f) {
-        yawFail = true;
-    } else {
-        yawFail = false;
-    }
+    alignCheckFail = alignCheckFail || (magTestRatio.x > alignMagTestMax || magTestRatio.y > alignMagTestMax);
 
-    // Check for significant change in GPS posiiton if disarmed which indicates bad GPS
+    // fail if the EKF settings require vertical GPS velocity and the receiver does not provide it
+    alignCheckFail = alignCheckFail || ((_fusionModeGPS == 0) && !_ahrs->get_gps().have_vertical_velocity());
+
+    // Check for significant motion in GPS solution while disarmed
     // Note: this assumes we are not flying from a moving vehicle, eg boat
-    const struct Location &gpsloc = _ahrs->get_gps().location(); // Current location
-    static float gpsDriftNE; // amount of position drift detected
-    const float posFiltTimeConst = 10.0f; // time constant used to decay position drift
-    // calculate time lapsesd since last GPS fix and limit to prevent numerical errors
-    float deltaTime = constrain_float(float(lastFixTime_ms - secondLastFixTime_ms)*0.001f,0.01f,posFiltTimeConst);
-    // Sum distance moved
-    gpsDriftNE += location_diff(gpsloc_prev, gpsloc).length();
-    gpsloc_prev = gpsloc;
-    // Decay distance moved exponentially to zero
-    gpsDriftNE *= (1.0f - deltaTime/posFiltTimeConst);
-    // Clamp the fiter state to prevent excessive persistence of large transients
-    gpsDriftNE = min(gpsDriftNE,10.0f);
-    // Fail if more than 3 metres drift after filtering whilst pre-armed when the vehicle is supposed to be stationary
-    // This corresponds to a maximum acceptable average drift rate of 0.3 m/s or single glitch event of 3m
-    bool gpsDriftFail = gpsDriftNE > 3.0f && !vehicleArmed;
-
-    // Check that the vertical GPS vertical velocity is reasonable after noise filtering
-    bool gpsVertVelFail;
-    static float gpsVertVelFilt;
-    if (_ahrs->get_gps().have_vertical_velocity() && !vehicleArmed) {
-        // check that the average vertical GPS velocity is close to zero
-        gpsVertVelFilt = 0.1f * velNED.z + 0.9f * gpsVertVelFilt;
-        gpsVertVelFilt = constrain_float(gpsVertVelFilt,-10.0f,10.0f);
-        gpsVertVelFail = (fabsf(gpsVertVelFilt) > 0.3f);
-    } else if ((_fusionModeGPS == 0) && !_ahrs->get_gps().have_vertical_velocity()) {
-        // If the EKF settings require vertical GPS velocity and the receiver is not outputting it, then fail
-        gpsVertVelFail = true;
-    } else {
-        gpsVertVelFail = false;
-    }
-
-    // Check that the horizontal GPS vertical velocity is reasonable after noise filtering
-    bool gpsHorizVelFail;
-    static float gpsHorizVelFilt;
     if (!vehicleArmed) {
-        gpsHorizVelFilt = 0.1f * pythagorous2(velNED.x,velNED.y) + 0.9f * gpsHorizVelFilt;
-        gpsHorizVelFilt = constrain_float(gpsHorizVelFilt,-10.0f,10.0f);
-        gpsHorizVelFail = (fabsf(gpsHorizVelFilt) > 0.3f);
-    } else {
-        gpsHorizVelFail = false;
+        // fail if horizontal drift is too large
+        alignCheckFail = alignCheckFail || (gpsDriftHoriz > alignDriftMax);
+
+        // fail if vertical velocity is too large
+        // NOTE: gpsVertVelFilt will be 0 if have_vertical_velocity() is false
+        alignCheckFail = alignCheckFail || (fabsf(gpsVertVelFilt) > alignVertVelMax);
+
+        // fail if horizontal velocity is too large
+        alignCheckFail = alignCheckFail || (fabsf(gpsHorizVelFilt) > alignHorizVelMax);
     }
 
     // record time of fail
-    // assume  fail first time called
-    if (gpsVelFail || numSatsFail || hAccFail || yawFail || hdopFail || gpsDriftFail || gpsVertVelFail || gpsHorizVelFail || lastGpsVelFail_ms == 0) {
-        lastGpsVelFail_ms = imuSampleTime_ms;
+    // assume fail on the first call
+    if (alignCheckFail || firstCall) {
+        lastAlignFail_ms = imuSampleTime_ms;
+        firstCall = false;
     }
 
     // continuous period without fail required to return healthy
-    if (imuSampleTime_ms - lastGpsVelFail_ms > 10000) {
-        return true;
-    } else {
-        return false;
-    }
+    return (imuSampleTime_ms - lastAlignFail_ms > 10000);
 }
 
 // Read the range finder and take new measurements if available
