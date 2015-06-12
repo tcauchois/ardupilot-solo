@@ -41,7 +41,7 @@
 #define MAGE_PNOISE_DEFAULT     0.0003f
 #define MAGB_PNOISE_DEFAULT     0.0003f
 #define VEL_GATE_DEFAULT        5
-#define POS_GATE_DEFAULT        10
+#define POS_GATE_DEFAULT        5
 #define HGT_GATE_DEFAULT        10
 #define MAG_GATE_DEFAULT        3
 #define MAG_CAL_DEFAULT         1
@@ -4672,6 +4672,7 @@ void NavEKF::InitialiseVariables()
     gpsAidingBad = false;
     highYawRate = false;
     yawRateFilt = 0.0f;
+    gpsAccuracyGood = false;
 }
 
 // return true if we should use the airspeed sensor
@@ -4821,7 +4822,7 @@ void  NavEKF::getFilterStatus(nav_filter_status &status) const
     status.flags.horiz_vel = someHorizRefData && notDeadReckoning && filterHealthy;      // horizontal velocity estimate valid
     status.flags.vert_vel = someVertRefData && filterHealthy;        // vertical velocity estimate valid
     status.flags.horiz_pos_rel = ((doingFlowNav && gndOffsetValid) || doingWindRelNav || doingNormalGpsNav) && notDeadReckoning && filterHealthy;   // relative horizontal position estimate valid
-    status.flags.horiz_pos_abs = !gpsAidingBad && doingNormalGpsNav && notDeadReckoning && filterHealthy; // absolute horizontal position estimate valid
+    status.flags.horiz_pos_abs = !gpsAidingBad && doingNormalGpsNav && notDeadReckoning && filterHealthy && gpsAccuracyGood; // absolute horizontal position estimate valid
     status.flags.vert_pos = !hgtTimeout && filterHealthy;            // vertical position estimate valid
     status.flags.terrain_alt = gndOffsetValid && filterHealthy;		// terrain height estimate valid
     status.flags.const_pos_mode = constPosMode && filterHealthy;     // constant position mode
@@ -5259,6 +5260,68 @@ Quaternion NavEKF::getDeltaQuaternion(void) const
 void NavEKF::getQuaternion(Quaternion& ret) const
 {
     ret = state.quat;
+}
+
+// update inflight calculaton that determines if GPS data is good enough for reliable navigation
+void NavEKF::calcGpsGoodForFlight(void)
+{
+    // use a simple criteria based on the GPS receivers claimed speed accuracy and the EKF innovation consistency checks
+    static bool gpsSpdAccPass = false;
+    static bool ekfInnovationsPass = false;
+
+    // set up varaibles and constants used by filter that is applied to GPS speed accuracy
+    const float alpha1 = 0.2f; // coefficient for first stage LPF applied to raw speed accuracy data
+    const float tau = 10.0f; // time constant (sec) of peak hold decay
+    static float lpfFilterState = 0.0f; // first stage LPF filter state
+    static float peakHoldFilterState = 0.0f; // peak hold with exponential decay filter state
+    static uint32_t lastTime_ms = 0;
+    if (lastTime_ms == 0) {
+        lastTime_ms =  imuSampleTime_ms;
+    }
+    float dtLPF = (imuSampleTime_ms - lastTime_ms) * 1e-3f;
+    lastTime_ms = imuSampleTime_ms;
+    float alpha2 = constrain_float(dtLPF/tau,0.0f,1.0f);
+
+    // get the receivers reported speed accuracy
+    float gpsSpdAccRaw;
+    if (!_ahrs->get_gps().speed_accuracy(gpsSpdAccRaw)) {
+        gpsSpdAccRaw = 0.0f;
+    }
+
+    // filter the raw speed accuracy using a LPF
+    lpfFilterState = constrain_float((alpha1 * gpsSpdAccRaw + (1.0f - alpha1) * lpfFilterState),0.0f,10.0f);
+
+    // apply a peak hold filter to the LPF output
+    peakHoldFilterState = max(lpfFilterState,((1.0f - alpha2) * peakHoldFilterState));
+
+    // Apply a threshold test with hysteresis to the filtered GPS speed accuracy data
+    if (peakHoldFilterState > 1.5f ) {
+        gpsSpdAccPass = false;
+    } else if(peakHoldFilterState < 1.0f) {
+        gpsSpdAccPass = true;
+    }
+
+    // Apply a threshold test with hysteresis to the normalised position and velocity innovations
+    // Require a fail for one second and a pass for 10 seconds to transition
+    static uint32_t lastInnovPassTime_ms;
+    static uint32_t lastInnovFailTime_ms;
+    if (lastInnovFailTime_ms == 0) {
+        lastInnovFailTime_ms = imuSampleTime_ms;
+        lastInnovPassTime_ms = imuSampleTime_ms;
+    }
+    if (velTestRatio < 1.0f && posTestRatio < 1.0f) {
+        lastInnovPassTime_ms = imuSampleTime_ms;
+    } else if (velTestRatio > 0.7f || posTestRatio > 0.7f) {
+        lastInnovFailTime_ms = imuSampleTime_ms;
+    }
+    if ((imuSampleTime_ms - lastInnovPassTime_ms) > 1000) {
+        ekfInnovationsPass = false;
+    } else if ((imuSampleTime_ms - lastInnovFailTime_ms) > 10000) {
+        ekfInnovationsPass = true;
+    }
+
+    // both GPS speed accuracy and EKF innovations must pass
+    gpsAccuracyGood = gpsSpdAccPass && ekfInnovationsPass;
 }
 
 #endif // HAL_CPU_CLASS
