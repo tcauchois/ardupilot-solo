@@ -4184,6 +4184,9 @@ void NavEKF::readGpsData()
         // Monitor quality of the GPS velocity data for alignment
         gpsGoodToAlign = calcGpsGoodToAlign();
 
+        // Monitor qulaity of GPS data inflight
+        calcGpsGoodForFlight();
+
         // read latitutde and longitude from GPS and convert to local NE position relative to the stored origin
         // If we don't have an origin, then set it to the current GPS coordinates
         const struct Location &gpsloc = _ahrs->get_gps().location();
@@ -4814,7 +4817,7 @@ void  NavEKF::getFilterStatus(nav_filter_status &status) const
     bool someVertRefData = (!velTimeout && (_fusionModeGPS == 0)) || !hgtTimeout;
     bool someHorizRefData = !(velTimeout && posTimeout && tasTimeout) || doingFlowNav;
     bool optFlowNavPossible = flowDataValid && (_fusionModeGPS == 3);
-    bool gpsNavPossible = !gpsNotAvailable && (_fusionModeGPS <= 2) && gpsGoodToAlign;
+    bool gpsNavPossible = !gpsNotAvailable && (_fusionModeGPS <= 2) && gpsGoodToAlign && gpsAccuracyGood;
     bool filterHealthy = healthy();
 
     // set individual flags
