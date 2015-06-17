@@ -18,7 +18,7 @@ void AP_Gimbal::receive_feedback(mavlink_channel_t chan, mavlink_message_t *msg)
 
     decode_feedback(msg);
     update_state();
-    if (_ekf.getStatus() && !isCopterFlipped() && _gimbalParams.K_gimbalRate!=0.0f){
+    if (_ekf.getStatus() && !isCopterFlipped() && _gimbalParams.K_gimbalRate>=0.0f){
         send_control(chan);
     }
 
@@ -68,6 +68,13 @@ void AP_Gimbal::update_state()
     gimbalRateDemVec += getGimbalRateDemVecYaw(quatEst);
     gimbalRateDemVec += getGimbalRateDemVecTilt(quatEst);
     gimbalRateDemVec += getGimbalRateDemVecForward(quatEst);
+
+    // If the pointing loop gain is zero reset the rate demand
+    if (_gimbalParams.K_gimbalRate==0.0f){
+        gimbalRateDemVec.zero();
+    }
+
+    // Add the bias
     gimbalRateDemVec += getGimbalRateDemVecGyroBias();
 }
 
