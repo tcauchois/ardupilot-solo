@@ -5309,8 +5309,8 @@ void NavEKF::calcGpsGoodForFlight(void)
 
     // Apply a threshold test with hysteresis to the normalised position and velocity innovations
     // Require a fail for one second and a pass for 10 seconds to transition
-    static uint32_t lastInnovPassTime_ms;
-    static uint32_t lastInnovFailTime_ms;
+    static uint32_t lastInnovPassTime_ms = 0;
+    static uint32_t lastInnovFailTime_ms = 0;
     if (lastInnovFailTime_ms == 0) {
         lastInnovFailTime_ms = imuSampleTime_ms;
         lastInnovPassTime_ms = imuSampleTime_ms;
