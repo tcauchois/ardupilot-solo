@@ -2,7 +2,7 @@
 
 echo "Checking modules"
 
-MODULE_LIST="PX4Firmware PX4NuttX uavcan"
+MODULE_LIST="PX4Firmware PX4NuttX"
 
 NEED_INIT=0
 

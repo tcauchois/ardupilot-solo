@@ -16,7 +16,6 @@ endif
 PX4_ROOT := $(shell cd $(SKETCHBOOK)/modules/PX4Firmware && pwd)
 NUTTX_ROOT := $(shell cd $(SKETCHBOOK)/modules/PX4NuttX && pwd)
 NUTTX_SRC := $(NUTTX_ROOT)/nuttx/
-UAVCAN_DIR=$(shell cd $(SKETCHBOOK)/modules/uavcan && pwd)/
 
 # warn if user has old PX4Firmware or PX4NuttX trees
 ifneq ($(wildcard $(SKETCHBOOK)/../PX4Firmware),)
