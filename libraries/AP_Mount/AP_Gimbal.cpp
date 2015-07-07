@@ -69,6 +69,36 @@ void AP_Gimbal::update_state()
     gimbalRateDemVec += getGimbalRateDemVecTilt(quatEst);
     gimbalRateDemVec += getGimbalRateDemVecForward(quatEst);
     gimbalRateDemVec += getGimbalRateDemVecGyroBias();
+
+    update_joint_angle_est();
+    _time_since_debug += _measurement.delta_time;
+}
+
+void AP_Gimbal::update_joint_angle_est()
+{
+    static const float tc = 0.3f;
+    float dt = _measurement.delta_time;
+    float alpha = constrain_float(dt/(dt+tc),0.0f,1.0f);
+
+    Quaternion vehicle_to_camera_quat;
+    vehicle_to_camera_quat.from_vector312(_measurement.joint_angles.x,_measurement.joint_angles.y,_measurement.joint_angles.z);
+
+    Matrix3f Tvc; // vehicle to camera frame
+    vehicle_to_camera_quat.rotation_matrix(Tvc);
+
+    // rotate filtered attitude with gyro
+    Quaternion del_ang;
+    del_ang.from_axis_angle(_measurement.delta_angles - Tvc*_ahrs.get_gyro()*dt);
+    vehicle_to_camera_quat_filt *= del_ang;
+
+    // drag filtered attitude towards measured attitude
+    Vector3f angle_corr;
+    (vehicle_to_camera_quat_filt.inverse()*vehicle_to_camera_quat).to_axis_angle(angle_corr);
+    angle_corr *= alpha;
+
+    vehicle_to_camera_quat_filt.rotate(angle_corr);
+    vehicle_to_camera_quat_filt.normalize();
+    vehicle_to_camera_quat_filt.to_vector312(filtered_joint_angles.x,filtered_joint_angles.y,filtered_joint_angles.z);
 }
 
 Vector3f AP_Gimbal::getGimbalRateDemVecYaw(const Quaternion &quatEst)

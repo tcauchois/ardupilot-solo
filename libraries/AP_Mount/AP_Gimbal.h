@@ -76,6 +76,7 @@ private:
     void send_control(mavlink_channel_t chan);
     void update_state();
     void decode_feedback(mavlink_message_t *msg);
+    void update_joint_angle_est();
 
     bool isCopterFlipped();
 
@@ -85,6 +86,9 @@ private:
     Vector3f getGimbalRateDemVecForward(const Quaternion &quatEst);
     Vector3f getGimbalRateDemVecGyroBias();
 
+    Quaternion vehicle_to_camera_quat_filt = Quaternion();
+    Vector3f filtered_joint_angles = Vector3f(0,0,0);
+    float _time_since_debug = 0;
 };
 
 #endif // AP_AHRS_NAVEKF_AVAILABLE
