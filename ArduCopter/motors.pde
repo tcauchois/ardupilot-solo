@@ -322,6 +322,13 @@ static bool pre_arm_checks(bool display_failure)
             }
             return false;
         }
+        // ensure inertial nav yaw estimate is ok
+        if (!inertial_nav.get_filter_status().flags.yaw) {
+            if (display_failure) {
+                gcs_send_text_P(SEVERITY_HIGH,PSTR("PreArm: Check mag field"));
+            }
+            return false;
+        }
     }
 
     // check GPS

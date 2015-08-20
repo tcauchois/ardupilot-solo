@@ -4827,6 +4827,7 @@ void  NavEKF::getFilterStatus(nav_filter_status &status) const
     bool optFlowNavPossible = flowDataValid && (_fusionModeGPS == 3);
     bool gpsNavPossible = !gpsNotAvailable && (_fusionModeGPS <= 2) && gpsGoodToAlign;
     bool filterHealthy = healthy();
+    bool yawHealthy = (magTestRatio.x <= 1.0f && magTestRatio.y <= 1.0f);
 
     // set individual flags
     status.flags.attitude = !state.quat.is_nan() && filterHealthy;   // attitude valid (we need a better check)
@@ -4843,6 +4844,7 @@ void  NavEKF::getFilterStatus(nav_filter_status &status) const
     status.flags.takeoff = expectGndEffectTakeoff; // The EKF has been told to expect takeoff and is in a ground effect mitigation mode
     status.flags.touchdown = expectGndEffectTouchdown; // The EKF has been told to detect touchdown and is in a ground effect mitigation mode
     status.flags.gps_glitching = !gpsAccuracyGood; // The GPS is glitching
+    status.flags.yaw = yawHealthy && filterHealthy;
 }
 
 // send an EKF_STATUS message to GCS
