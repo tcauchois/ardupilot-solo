@@ -4596,7 +4596,7 @@ void NavEKF::InitialiseVariables()
     lastGpsVelFail_ms = 0;
     lastGpsAidBadTime_ms = 0;
     timeAtDisarm_ms = 0;
-    lastGpsMagPass_ms = imuSampleTime_ms;
+    prearmYawResetTimer_ms = imuSampleTime_ms;
 
     // initialise other variables
     gpsNoiseScaler = 1.0f;
@@ -5118,12 +5118,13 @@ bool NavEKF::calcGpsGoodToAlign(void)
         hAccFail =  false;
     }
 
-    // Check if we have good magnetometer consistency and bad innovations for longer than 5 seconds then we reset heading and field states
-    // because it could have been caused by a bad iitialisation
-    if ((magTestRatio.x <= 1.0f && magTestRatio.y <= 1.0f) || !consistentMagData) {
-        lastGpsMagPass_ms = imuSampleTime_ms;
+    // If we have both good magnetometer consistency and bad innovation for longer than 5 seconds, and the vehicle is disarmed,
+    // then we reset heading and field state because it could have been caused by a bad initialization.
+    // If one of those conditions fails, we reset the timer.
+    if (!((magTestRatio.x > 1.0f || magTestRatio.y > 1.0f) && consistentMagData && !vehicleArmed)) {
+        prearmYawResetTimer_ms = imuSampleTime_ms;
     }
-    if (imuSampleTime_ms - lastGpsMagPass_ms > 5000) {
+    if (imuSampleTime_ms - prearmYawResetTimer_ms > 5000) {
         // reset heading and field states
         Vector3f eulerAngles;
         getEulerAngles(eulerAngles);

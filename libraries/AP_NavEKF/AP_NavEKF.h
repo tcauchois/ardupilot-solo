@@ -676,7 +676,8 @@ private:
     float gpsDriftNE;               // amount of drift detected in the GPS position during pre-flight GPs checks
     float gpsVertVelFilt;           // amount of filterred vertical GPS velocity detected durng pre-flight GPS checks
     float gpsHorizVelFilt;          // amount of filtered horizontal GPS velocity detected during pre-flight GPS checks
-    uint32_t lastGpsMagPass_ms;     // last pass time in msec of the magnetometer innovation consistency check used to determine if the EKF can start using GPS
+    uint32_t prearmYawResetTimer_ms;// in prearm checks we reset yaw if both innovation is bad and compass consistency is good
+                                    // ... prearmYawResetTimer_ms is the last time one of those conditions was not true
     bool consistentMagData;         // true when the magnetometers are passing consistency checks
 
     // Used by smoothing of state corrections
