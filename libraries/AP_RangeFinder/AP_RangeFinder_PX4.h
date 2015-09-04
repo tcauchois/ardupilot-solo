@@ -37,6 +37,7 @@ public:
 
 private:
     int _fd;
+    int _orb_handle;
     uint64_t _last_timestamp;
 
     int16_t _last_max_distance_cm;
@@ -47,7 +48,7 @@ private:
     static uint8_t num_px4_instances;
 
     // try to open the PX4 driver and return its fd
-    static int open_driver(void);
+    static int open_next_fd(void);
 };
 
 #endif // AP_RangeFinder_PX4_H
