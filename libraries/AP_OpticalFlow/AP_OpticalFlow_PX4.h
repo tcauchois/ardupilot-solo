@@ -10,6 +10,7 @@ class AP_OpticalFlow_PX4 : public OpticalFlow_backend
 public:
     /// constructor
     AP_OpticalFlow_PX4(OpticalFlow &_frontend);
+    ~AP_OpticalFlow_PX4();
 
     // init - initialise the sensor
     void init();
@@ -19,6 +20,7 @@ public:
 
 private:
     int         _fd;                // file descriptor for sensor
+    int         _orb_handle;        // ORB handle for sensor
     uint64_t    _last_timestamp;    // time of last update (used to avoid processing old reports)
 };
 
